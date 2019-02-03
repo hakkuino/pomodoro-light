@@ -13,10 +13,10 @@ const byte PIN_LED_B  = PD3;
 RgbLed led;
 
 SmartButton button = SmartButton(9,8);
-int count = 0;
 
-Color states[2] = {Color(0,255,0), Color(255,0,0)};
+enum State {iAmFree = 0, iAmAlmostFree = 1, iAmBusy = 2};
 
+State currentState = iAmFree;
 
 void releasedCallback()
 {
@@ -29,30 +29,68 @@ void changeState()
   {
     led.stopAnimation();
   }
-  RgbLedAnimationStep* steps[]={
-    new RFadeTo(0, states[count%2]),
-    new RSetTo(100,states[count%2]),
-    new RStop(200)
-  };
-  led.setAnimation(sizeof(steps)/sizeof(RgbLedAnimationStep*), steps);
-  led.startAnimation();
-  count++;
+  switch(currentState){
+    case iAmFree:
+    {
+      currentState = iAmAlmostFree;
+
+      RgbLedAnimationStep* steps[]={
+        new RFadeTo(100, Color(255,165,0)),
+        new RSetTo(100, Color(255,165,0)),
+        new RStop()
+      };
+      led.setAnimation(sizeof(steps)/sizeof(RgbLedAnimationStep*), steps);
+      led.startAnimation();
+
+      break;
+    }
+    case iAmAlmostFree:
+    {
+      currentState = iAmBusy;
+
+      RgbLedAnimationStep* steps[]={
+        new RFadeTo(100, Color(255,0,0)),
+        new RSetTo(100, Color(255,0,0)),
+        new RWait(5000),
+        new RCallback(changeState),
+        new RStop()
+      };
+      led.setAnimation(sizeof(steps)/sizeof(RgbLedAnimationStep*), steps);
+      led.startAnimation();
+
+      break;
+    }
+    case iAmBusy:
+    {
+      currentState = iAmFree;
+
+      RgbLedAnimationStep* steps[]={
+        new RFadeTo(100, Color(0,255,0)),
+        new RSetTo(100, Color(0,255,0)),
+        new RStop()
+      };
+      led.setAnimation(sizeof(steps)/sizeof(RgbLedAnimationStep*), steps);
+      led.startAnimation();
+
+      break;
+    }
+  }
 }
 
 void alarm()
 {
-  count=0;
+  currentState=iAmBusy;
   if (led.isActive())
   {
     led.stopAnimation();
   }
 
   RgbLedAnimationStep* steps[]={
-    new RSetTo(0, Color(0,0,0)),
-    new RFadeTo(100, Color(255,0,0)),
-    new RWait(400),
-    new RFadeTo(1200, Color(0,0,0)),
-    new RLoopTo(1600,0, -1)
+    new RSetTo(100, Color(0,0,0)),
+    new RFadeTo(300, Color(255,0,0)),
+    new RWait(800),
+    new RFadeTo(400, Color(0,0,0)),
+    new RLoopTo(0, -1)
   };
   led.setAnimation(sizeof(steps)/sizeof(RgbLedAnimationStep*), steps);
   led.startAnimation();
@@ -60,14 +98,14 @@ void alarm()
 
 void rainbow()
 {
-  count=0;
+  currentState=iAmBusy;
   RgbLedAnimationStep* steps[]={
-    new RSetTo(0, Color(0,0,0)),
-    new RFadeTo(100, Color(0,0,255)),
-    new RFadeTo(1100, Color(255,0,0)),
-    new RFadeTo(2100, Color(0,255,0)),
-    new RFadeTo(3100, Color(0,0,255)),
-    new RLoopTo(4100, 1100, -1)
+    new RSetTo(100, Color(0,0,0)),
+    new RFadeTo(1000, Color(0,0,255)),
+    new RFadeTo(1000, Color(255,0,0)),
+    new RFadeTo(1000, Color(0,255,0)),
+    new RFadeTo(1000, Color(0,0,255)),
+    new RLoopTo(1100, -1)
   };
   led.setAnimation(sizeof(steps)/sizeof(RgbLedAnimationStep*), steps);
   led.startAnimation();  
@@ -92,11 +130,12 @@ void clickCallback(byte nbClicks)
 
 void longPressCallback(byte nbClicks, unsigned int time)
 {
+  boolean wasAnimated = false;
   if (led.isActive())
   {
     led.stopAnimation();
+    wasAnimated=true;
   }
-  count=0;
   if (nbClicks == 1)
   {
     float f = constrain(led.getBrightness() + 0.01, 0.1, 1.0);
@@ -107,6 +146,10 @@ void longPressCallback(byte nbClicks, unsigned int time)
     float f = constrain(led.getBrightness() - 0.01, 0.1, 1.0);
     led.setBrightness(f);
   }
+  if (wasAnimated)
+  {
+    led.resumeAnimation();
+  }
   DEBUG("longPress " + String(nbClicks) + " - " + String(time));
 }
 
@@ -114,14 +157,13 @@ void setup() {
   Serial.begin(9600);
   led.init(PIN_LED_R,PIN_LED_G,PIN_LED_B);
   RgbLedAnimationStep* steps[]={
-    new RSetTo(0,Color(0,0,0)),
-    new RFadeTo(100, states[count%2]),
+    new RSetTo(100,Color(0,0,0)),
+    new RFadeTo(200, Color(0,255,0)),
     new RWait(300),
-    new RFadeTo(600, Color(0,0,0)),
-    new RWait(800),
-    new RFadeTo(1000, states[count%2]),
-    //new RSetTo(100,states[count%2]),
-    new RStop(1500)
+    new RFadeTo(200, Color(0,0,0)),
+    new RWait(200),
+    new RFadeTo(500, Color(0,255,0)),
+    new RStop()
   };
   led.setAnimation(sizeof(steps)/sizeof(RgbLedAnimationStep*), steps);
   led.startAnimation();
@@ -198,10 +240,6 @@ void loop() {
     {
       Logger::getLogger()->getFilters()->clear();
     }
-    // else if (command.getCommand() == "mem")
-    // {
-    //   Serial.println(freeMemory());
-    // }
   }
   
   led.runAnimation();
